@@ -22,11 +22,4 @@ App
 └── go.mod                      # Cấu hình module Go
 ```
 
-.env                            # Lưu trữ biến môi trường, như access_token, cookie FB
-.env.example                    # Mẫu cấu hình biến môi trường
-
-.gitignore                       # Các file và thư mục cần bỏ qua khi commit
-go.mod                           # Quản lý phụ thuộc trong Go
-go.sum                           # Đảm bảo tính toàn vẹn của các phụ thuộc Go
-
 
