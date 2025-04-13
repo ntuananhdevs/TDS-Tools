@@ -1,3 +1,5 @@
+
+```bash
 App
 ├── cmd/
 │   └── main.go                 # Điểm khởi chạy chính của ứng dụng
@@ -18,7 +20,7 @@ App
 │   ├── configtds.txt           # Lưu trữ token TDS
 │   └── Cookie_FB.txt           # Lưu trữ cookie của các tài khoản Facebook
 └── go.mod                      # Cấu hình module Go
-
+```
 
 .env                            # Lưu trữ biến môi trường, như access_token, cookie FB
 .env.example                    # Mẫu cấu hình biến môi trường
