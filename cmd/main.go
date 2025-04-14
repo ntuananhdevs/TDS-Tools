@@ -3,113 +3,124 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
-	"strconv"
-	"strings"
+
 	"tds/config"
-	"tds/internal/job"
 	"tds/internal/traodoisub"
 	"tds/models"
 	"tds/utils"
 )
 
 func main() {
-	// Nhập các giá trị cấu hình
-	delay_min, err := getIntInput("Nhập Delay Min (ms): ")
+	// Khởi tạo logger
+	logger := utils.NewLogger("debug") // Đổi thành "debug" để xem chi tiết API response
+	logger.Info("Khởi động công cụ TraDoiSub...")
+
+	// Tải cấu hình từ file .env
+	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(fmt.Sprintf("Lỗi khi tải cấu hình: %s", err.Error()))
+		return
 	}
-	delay_max, err := getIntInput("Nhập Delay Max (ms): ")
+	logger.Info(fmt.Sprintf("Đã tải cấu hình. Token: %s...", cfg.GetTDSToken()[:10]))
+
+	// Đọc cookie Facebook từ file
+	logger.Info("Đang đọc cookie Facebook từ file...")
+	fbCookies, err := loadFacebookCookies("../cookie.json")
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(fmt.Sprintf("Lỗi khi đọc cookie: %s", err.Error()))
+		return
 	}
-	block_after, err := getIntInput("Sau Bao Nhiêu Nhiệm Vụ Thì Chống Block: ")
-	if err != nil {
-		log.Fatal(err)
-	}
-	rest_after, err := getIntInput("Sau Bao Nhiêu Nhiệm Vụ Thì Nghỉ Ngơi: ")
-	if err != nil {
-		log.Fatal(err)
-	}
-	change_nick_after, err := getIntInput("Sau Bao Nhiêu Nhiệm Vụ Thì Đổi Nick: ")
-	if err != nil {
-		log.Fatal(err)
-	}
-	delete_cookie_after, err := getIntInput("Lỗi Bao Nhiêu Nhiệm Vụ Thì Xóa Cookie: ")
-	if err != nil {
-		log.Fatal(err)
+	logger.Info(fmt.Sprintf("Đã đọc %d tài khoản Facebook từ file cookie", len(fbCookies)))
+
+	// Trích xuất UID từ tài khoản Facebook đầu tiên
+	if len(fbCookies) > 0 {
+		uid := fbCookies[0].UID // Lấy UID trực tiếp từ cấu trúc cookie
+		if uid != "" {
+			logger.Info(fmt.Sprintf("UID của tài khoản Facebook: %s", uid))
+		} else {
+			logger.Error("Không tìm thấy UID trong cookie của tài khoản Facebook.")
+			return
+		}
+	} else {
+		logger.Error("Không có tài khoản Facebook nào trong file cookie")
+		return
 	}
 
-	// Tạo cấu hình với các giá trị vừa nhập
-	config := config.ToolConfig{
-		DelayMin:           delay_min,
-		DelayMax:           delay_max,
-		BlockAfter:         block_after,
-		RestAfter:          rest_after,
-		ChangeNickAfter:    change_nick_after,
-		DeleteCookieAfter:  delete_cookie_after,
-	}
+	// Khởi tạo TDS client
+	tdsClient := traodoisub.NewTDSClient(cfg, logger)
 
-	// In thông tin cấu hình
-	fmt.Println("\nCấu hình đã được thiết lập:")
-	fmt.Printf("Delay Min: %d ms\n", config.DelayMin)
-	fmt.Printf("Delay Max: %d ms\n", config.DelayMax)
-	fmt.Printf("Block after %d tasks\n", config.BlockAfter)
-	fmt.Printf("Rest after %d tasks\n", config.RestAfter)
-	fmt.Printf("Change Nick after %d tasks\n", config.ChangeNickAfter)
-	fmt.Printf("Delete Cookie after %d tasks\n", config.DeleteCookieAfter)
-
-	// Lấy và in ra cookies
-	cookies := loadCookies("../cookie.json")
-	fmt.Println("\nThông tin Cookie:")
-	for _, cookie := range cookies {
-		fmt.Printf("Cookie Name: %s, Cookie Value: %s\n", cookie.UserID, cookie.Cookie)
-	}
-
-	// Khởi tạo TDSClient
-	tds := traodoisub.NewClient(config.AccessTokenTDS)
-
-	// Lấy tất cả nhiệm vụ từ Traodoisub
-	jobs, err := tds.GetAllJobs()
+	// Lấy thông tin profile TDS
+	profile, err := tdsClient.GetProfile()
 	if err != nil {
-		utils.Error("Không thể lấy nhiệm vụ: " + err.Error())
-		log.Fatal(err)
+		logger.Error(fmt.Sprintf("Lỗi khi lấy thông tin profile: %s", err.Error()))
+		return
+	}
+	logger.Info(fmt.Sprintf("Xin chào %s! Số xu hiện tại: %d", profile.UserName, profile.Xu))
+
+	// Cấu hình tài khoản Facebook đầu tiên
+	if len(fbCookies) > 0 {
+		err = tdsClient.ConfigureAccount(fbCookies[0].UID) // Truyền UID để cấu hình tài khoản Facebook
+		if err != nil {
+			logger.Error(fmt.Sprintf("Lỗi khi cấu hình tài khoản Facebook: %s", err.Error()))
+			return
+		}
+	} else {
+		logger.Error("Không có tài khoản Facebook nào trong file cookie")
+		return
 	}
 
-	// Gọi hàm để thực hiện các nhiệm vụ
-	job.ExecuteTasks(config, jobs)
+	// Lấy danh sách nhiệm vụ
+	logger.Info("Đang lấy danh sách nhiệm vụ từ TraDoiSub...")
+	jobs, err := tdsClient.GetAllJobs()
+	if err != nil {
+		logger.Error(fmt.Sprintf("Lỗi khi lấy danh sách nhiệm vụ: %s", err.Error()))
+		return
+	}
+
+	// Hiển thị danh sách nhiệm vụ
+	displayJobs("LIKE", jobs.LikeJobs, logger)
+	displayJobs("FOLLOW", jobs.FollowJobs, logger)
+	displayJobs("SHARE", jobs.ShareJobs, logger)
+	displayJobs("PAGE", jobs.PageJobs, logger)
+
+	// Hiển thị tổng số nhiệm vụ
+	totalJobs := len(jobs.LikeJobs) + len(jobs.FollowJobs) + len(jobs.ShareJobs) + len(jobs.PageJobs)
+	logger.Info(fmt.Sprintf("Tổng cộng: %d nhiệm vụ", totalJobs))
 }
 
-// Hàm nhận đầu vào từ người dùng và chuyển đổi thành số nguyên
-func getIntInput(prompt string) (int, error) {
-	var input string
-	fmt.Print(prompt)
-	fmt.Scanln(&input)
-	input = strings.TrimSpace(input)
-
-	// Chuyển đổi sang kiểu int
-	num, err := strconv.Atoi(input)
+// loadFacebookCookies đọc cookie Facebook từ file JSON
+func loadFacebookCookies(filePath string) ([]models.FacebookCookie, error) {
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return 0, fmt.Errorf("input không hợp lệ: %v", err)
+		return nil, err
 	}
-	return num, nil
+
+	var cookies []models.FacebookCookie
+	err = json.Unmarshal(data, &cookies)
+	if err != nil {
+		return nil, err
+	}
+
+	return cookies, nil
 }
 
-// Hàm đọc cookies từ file
-func loadCookies(path string) []models.CookieUser {
-	file, err := os.ReadFile(path)
-	if err != nil {
-		utils.Error("Không thể đọc cookie file: " + err.Error())
-		os.Exit(1)
+// displayJobs hiển thị danh sách nhiệm vụ theo loại
+func displayJobs(jobType string, jobs []models.JobInfo, logger *utils.Logger) {
+	if len(jobs) == 0 {
+		logger.Info(fmt.Sprintf("Không có nhiệm vụ %s", jobType))
+		return
 	}
 
-	var cookies []models.CookieUser
-	err = json.Unmarshal(file, &cookies)
-	if err != nil {
-		utils.Error("Cookie file không hợp lệ: " + err.Error())
-		os.Exit(1)
-	}
+	logger.Info(fmt.Sprintf("=== %s (%d nhiệm vụ) ===", jobType, len(jobs)))
+	for i, job := range jobs {
+		// Kiểm tra trạng thái nhiệm vụ
+		if job.JobStatus != "ACTIVE" {
+			logger.Warn(fmt.Sprintf("Nhiệm vụ %s có trạng thái không hợp lệ: %s", jobType, job.JobStatus))
+			continue
+		}
 
-	return cookies
+		// Hiển thị nhiệm vụ nếu hợp lệ
+		logger.Info(fmt.Sprintf("%d. ID: %s, Link: %s, Xu: %d", i+1, job.ID, job.LinkPost, job.Reward))
+	}
 }
