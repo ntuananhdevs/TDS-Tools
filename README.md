@@ -18,7 +18,10 @@ App
 │   └── logger.go               # In log với màu sắc, timestamp, giúp debug dễ dàng hơn
 ├── assets/
 │   ├── configtds.txt           # Lưu trữ token TDS
-│   └── Cookie_FB.txt           # Lưu trữ cookie của các tài khoản Facebook
+│   └── Cookie_FB.txt  
+├── .env      # Lưu trữ token TDS
+├── cookie.json                  # Lưu trữ cookie Facebook
+├── go.sum                      # Cấu hình module Go
 └── go.mod                      # Cấu hình module Go
 ```
 

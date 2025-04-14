@@ -2,63 +2,56 @@ package job
 
 import (
 	"fmt"
-	"math/rand"
-	"sync"
-	"time"
-
 	"tds/config"
-	"tds/internal/facebook"
-	"tds/internal/traodoisub"
+	"time"
+	"math/rand"
+
 	"tds/models"
-	"tds/utils"
 )
 
-func Run(cookies []models.CookieUser) {
-	tds := traodoisub.NewClient(config.AccessTokenTDS)
-	var wg sync.WaitGroup
+// Hàm xử lý nhiệm vụ với các tham số cấu hình
+func ExecuteTasks(config config.ToolConfig, jobs map[string][]models.Job) {
+	taskCount := 0
 
-	// Xử lý tài khoản Facebook đồng thời
-	for _, user := range cookies {
-		wg.Add(1)
-		go func(user models.CookieUser) {
-			defer wg.Done()
-			handleUser(user, tds)
-		}(user)
+	for {
+		// Thực hiện nhiệm vụ
+		taskCount++
+		fmt.Printf("Đang thực hiện nhiệm vụ thứ %d...\n", taskCount)
+
+		// Tạo delay ngẫu nhiên giữa các nhiệm vụ
+		delay := randomDelay(config.DelayMin, config.DelayMax)
+		fmt.Printf("Delay: %d ms\n", delay)
+		time.Sleep(time.Duration(delay) * time.Millisecond)
+
+		// Kiểm tra nếu cần chống block
+		if taskCount%config.BlockAfter == 0 {
+			fmt.Println("Chống block!")
+		}
+
+		// Kiểm tra nếu cần nghỉ ngơi
+		if taskCount%config.RestAfter == 0 {
+			fmt.Println("Nghỉ ngơi một lát...")
+			time.Sleep(2 * time.Second) // Nghỉ ngơi 2 giây
+		}
+
+		// Kiểm tra nếu cần đổi nick
+		if taskCount%config.ChangeNickAfter == 0 {
+			fmt.Println("Đổi Nick!")
+		}
+
+		// Kiểm tra nếu cần xóa cookie
+		if taskCount%config.DeleteCookieAfter == 0 {
+			fmt.Println("Xóa cookie!")
+		}
+
+		// Thực hiện các nhiệm vụ chính
+		if taskCount >= 10 { // Chỉ là ví dụ, có thể dừng sau 10 nhiệm vụ
+			break
+		}
 	}
-
-	wg.Wait() // Chờ tất cả goroutines hoàn thành
 }
 
-func handleUser(user models.CookieUser, tds *traodoisub.TDSClient) {
-	fb := facebook.NewFacebookClient(user.Cookie)
-	_ = tds.Run(user.UserID) // Bắt đầu nhiệm vụ cho user
-	utils.Info("🧩 Bắt đầu với: " + user.Name)
-	jobCount := 0
-
-	// Lặp mãi cho mỗi nhiệm vụ
-	for {
-		jobs, err := tds.GetJob("like")
-		if err != nil || len(jobs) == 0 {
-			utils.Warning("Không có job cho " + user.Name)
-			time.Sleep(10 * time.Second)
-			continue
-		}
-		for _, j := range jobs {
-			if err := fb.Like(j.ID); err == nil {
-				msg, xu, _ := tds.ConfirmJob("like", j.ID)
-				utils.Success(fmt.Sprintf("%s LIKE %s | %s | %d xu", user.Name, j.ID, msg, xu))
-				jobCount++
-			} else {
-				utils.Warning(fmt.Sprintf("%s lỗi LIKE: %s", user.Name, j.ID))
-			}
-
-			time.Sleep(time.Duration(rand.Intn(3)+2) * time.Second)
-
-			// Nghỉ sau mỗi 10 job
-			if jobCount > 0 && jobCount%config.JobsBeforeRest == 0 {
-				utils.Info(fmt.Sprintf("⏸ %s nghỉ %v...", user.Name, config.RestDuration))
-				time.Sleep(config.RestDuration)
-			}
-		}
-	}
+// Hàm tạo delay ngẫu nhiên giữa DelayMin và DelayMax
+func randomDelay(min, max int) int {
+	return min + rand.Intn(max-min+1) // Đây chỉ là ví dụ đơn giản
 }

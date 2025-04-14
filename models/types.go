@@ -2,19 +2,17 @@ package models
 
 type Job struct {
 	ID   string `json:"id"`
+	Type string `json:"type"`
 	Link string `json:"link"`
-	Msg  string `json:"msg,omitempty"`
-	Type string `json:"type,omitempty"`
+	Msg  string `json:"msg"`
 }
 
 type CookieUser struct {
-	Cookie string `json:"cookie"`
-	Name   string `json:"name"`
 	UserID string `json:"user_id"`
+	Cookie string `json:"cookie"`
 }
 
+// TDSProfile lưu trữ thông tin của TDS
 type TDSProfile struct {
-	User  string `json:"user"`
-	Xu    int    `json:"xu"`
-	Xudie int    `json:"xudie"`
+	AccessToken string `json:"access_token"`
 }

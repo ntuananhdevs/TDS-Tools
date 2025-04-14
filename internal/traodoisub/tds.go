@@ -1,11 +1,9 @@
 package traodoisub
 
 import (
-	"encoding/json"  // Import json package
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
 	"tds/models"
 )
 
@@ -14,20 +12,20 @@ type TDSClient struct {
 }
 
 func NewClient(token string) *TDSClient {
-	return &TDSClient{Token: token}
+	return &TDSClient{
+		Token: token,
+	}
 }
 
-// Lấy tất cả nhiệm vụ từ Traodoisub (gọi từ API)
+// Lấy tất cả nhiệm vụ từ Traodoisub
 func (c *TDSClient) GetAllJobs() (map[string][]models.Job, error) {
-	jobTypes := []string{"like", "likegiare", "likesieure", "page", "reaction", "comment", "share", "follow", "group"}
-
+	jobTypes := []string{"like", "share", "follow"} // Các loại nhiệm vụ
 	jobs := make(map[string][]models.Job)
 
-	// Lấy tất cả nhiệm vụ cho mỗi loại job
 	for _, jobType := range jobTypes {
-		jobList, err := c.GetJob(jobType)
+		jobList, err := c.GetJob(jobType) // Sử dụng phương thức GetJob của TDSClient
 		if err != nil {
-			return nil, fmt.Errorf("lỗi khi lấy nhiệm vụ %s: %v", jobType, err)
+			return nil, fmt.Errorf("error getting job %s: %v", jobType, err)
 		}
 		jobs[jobType] = jobList
 	}
@@ -35,60 +33,29 @@ func (c *TDSClient) GetAllJobs() (map[string][]models.Job, error) {
 	return jobs, nil
 }
 
-// Lấy job theo loại (like, comment, share,...)
+// Lấy job theo loại (like, share, follow, etc.)
 func (c *TDSClient) GetJob(jobType string) ([]models.Job, error) {
-	// Đảm bảo không có ký tự không hợp lệ trong token
-	encodedToken := strings.TrimSpace(c.Token)  // Loại bỏ các ký tự thừa (như \r\n)
+	// Tạo URL yêu cầu
+	url := fmt.Sprintf("https://traodoisub.com/api/?fields=%s&access_token=%s", jobType, c.Token)
 
-	// Tạo URL hợp lệ
-	baseURL := "https://traodoisub.com/api/"
-	apiURL := fmt.Sprintf("%s?fields=%s&access_token=%s", baseURL, jobType, url.QueryEscape(encodedToken))
-
-	// Gửi yêu cầu HTTP để lấy dữ liệu nhiệm vụ
-	resp, err := http.Get(apiURL)
+	// Gửi yêu cầu HTTP
+	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch jobs: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// Giải mã JSON từ response
-	var jobs []models.Job
-	_ = json.NewDecoder(resp.Body).Decode(&jobs)
-
-	// Kiểm tra nếu không có nhiệm vụ
-	if len(jobs) == 0 {
-		return nil, fmt.Errorf("Không có nhiệm vụ cho %s", jobType)
+	// Kiểm tra mã trạng thái HTTP
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected HTTP status: %d", resp.StatusCode)
 	}
 
-	// In chi tiết nhiệm vụ để kiểm tra
-	for _, job := range jobs {
-		fmt.Printf("Nhiệm vụ ID: %s - Link: %s - Msg: %s\n", job.ID, job.Link, job.Msg)
+	// Giải mã JSON trả về thành các đối tượng Job
+	var jobs []models.Job
+	decoder := json.NewDecoder(resp.Body)
+	if err := decoder.Decode(&jobs); err != nil {
+		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
 	}
 
 	return jobs, nil
-}
-
-// Xác nhận job đã hoàn thành (sau khi làm nhiệm vụ)
-func (c *TDSClient) ConfirmJob(jobType, id string) (string, int, error) {
-	resp, err := http.Get(fmt.Sprintf("https://traodoisub.com/api/coin/?type=%s&id=%s&access_token=%s", jobType, id, c.Token))
-	if err != nil {
-		return "", 0, err
-	}
-	defer resp.Body.Close()
-
-	var result struct {
-		Data struct {
-			Msg string `json:"msg"`
-			Xu  int    `json:"xu"`
-		} `json:"data"`
-	}
-	_ = json.NewDecoder(resp.Body).Decode(&result)
-	return result.Data.Msg, result.Data.Xu, nil
-}
-
-// Hàm bắt đầu chạy nhiệm vụ cho user, sử dụng token và lấy nhiệm vụ
-func (c *TDSClient) Run(userID string) error {
-	// Gọi API để bắt đầu nhiệm vụ cho user
-	_, err := http.Get(fmt.Sprintf("https://traodoisub.com/api/?fields=run&id=%s&access_token=%s", userID, c.Token))
-	return err
 }

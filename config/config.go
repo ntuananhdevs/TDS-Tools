@@ -1,25 +1,32 @@
 package config
 
 import (
+	"log"
 	"os"
-	"time"
+	"github.com/joho/godotenv"
 )
 
-var (
-	AccessTokenTDS      = getAccessToken()  // Đọc token từ file configtds.txt
-	DelayMin            = 3 * time.Second
-	DelayMax            = 6 * time.Second
-	JobsBeforeRest      = 10
-	RestDuration        = 15 * time.Second
-	JobsBeforeSwitchAcc = 30
-)
+// Cấu hình Tool
+type ToolConfig struct {
+	DelayMin          int    // Delay tối thiểu giữa các nhiệm vụ
+	DelayMax          int    // Delay tối đa giữa các nhiệm vụ
+	BlockAfter        int    // Sau bao nhiêu nhiệm vụ thì chống block
+	RestAfter         int    // Sau bao nhiêu nhiệm vụ thì nghỉ ngơi
+	ChangeNickAfter   int    // Sau bao nhiêu nhiệm vụ thì đổi nick
+	DeleteCookieAfter int    // Sau bao nhiêu nhiệm vụ thì xóa cookie
+	AccessTokenTDS    string // Token TDS
+}
 
-// Hàm để lấy token TDS từ file configtds.txt
-func getAccessToken() string {
-	// Đọc token từ file assets/configtds.txt
-	data, err := os.ReadFile("../assets/configtds.txt")
+// Hàm nạp cấu hình từ .env hoặc file cấu hình
+func LoadConfig() ToolConfig {
+	// Load tệp .env để lấy thông tin môi trường nếu có
+	err := godotenv.Load("../.env")
 	if err != nil {
-		panic("Không tìm thấy token TDS. Đặt file assets/configtds.txt hoặc kiểm tra quyền đọc file")
+		log.Fatal("Error loading .env file")
 	}
-	return string(data)
+
+	// Trả về cấu hình với các tham số từ .env hoặc mặc định
+	return ToolConfig{
+		AccessTokenTDS: os.Getenv("ACCESS_TOKEN"), // Tải TDS token từ biến môi trường
+	}
 }
